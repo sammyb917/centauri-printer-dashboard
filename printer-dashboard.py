@@ -16,7 +16,7 @@ dashboard falls back to scanning and adopts the address that answers.
 If the scan finds nothing, the dashboard page itself asks for the IP
 and saves it to the config (merging, never clobbering).
 
-Build tag: printerdash-v11
+Build tag: printerdash-v16
 """
 
 import base64
@@ -35,7 +35,7 @@ from urllib.parse import urlparse, parse_qs, quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "printer-dashboard-config.json")
-BUILD_TAG = "printerdash-v11"
+BUILD_TAG = "printerdash-v16"
 
 # ---------------------------------------------------------------- SDCP ------
 # Command IDs per Elegoo's SDCP v3 spec. (Verified against the protocol docs
@@ -1023,6 +1023,17 @@ PAGE = """<!DOCTYPE html>
   .tbar{height:8px;background:#0a0e14;border-radius:4px;overflow:hidden;
         border:1px solid var(--line)}
   .tbar > div{height:100%;background:var(--amber)}
+  .temp .lbl b{display:inline-block}
+  .th-heat{color:#ff5347 !important;animation:thpulse 1.1s ease-in-out infinite}
+  .th-heat.nopulse{animation:none}
+  .th-at{color:#35d07f !important}
+  .th-over,.th-cool{color:#57a8ff !important}
+  .th-flash{animation:thflash .45s ease-in-out 3}
+  @keyframes thpulse{50%{opacity:.3}}
+  @keyframes thflash{50%{text-shadow:0 0 16px currentColor;
+    transform:scale(1.22)}}
+  #mutebtn{margin-left:auto;background:none;border:1px solid var(--line);
+    border-radius:8px;font-size:15px;padding:2px 9px;cursor:pointer}
   #camwrap{position:relative;background:#000;border-radius:8px;overflow:hidden}
   #cam{width:100%;display:block;min-height:180px}
   #cammsg{position:absolute;inset:0;display:flex;align-items:center;
@@ -1082,6 +1093,7 @@ PAGE = """<!DOCTYPE html>
   <span class="badge" id="state">—</span>
   <span class="sub" id="fw"></span>
   <span class="sub" id="err" style="color:var(--red)"></span>
+  <button id="mutebtn" title="Sound when a print finishes">🔊</button>
 </header>
 <div id="ipbox">
   <div class="row">
@@ -1238,12 +1250,89 @@ function renderCanvas(c){
   }).join('') + '</div>';
 }
 
+function heatState(cur, tgt){
+  if (cur === null || cur === undefined) return 'off';
+  tgt = tgt || 0;
+  if (tgt > 0){
+    var c = Math.round(cur), t = Math.round(tgt);
+    if (c < t) return 'heat';
+    if (c > t) return 'over';
+    return 'at';
+  }
+  return cur > 40 ? 'cool' : 'off';
+}
+var tempPrev = {};
+var tempFlashAt = {};
+var printActive = false;
+function paintTemp(id, bid, cls){
+  var el = $(id), bar = $(bid);
+  var colors = {heat: '#ff5347', at: '#35d07f', over: '#57a8ff',
+                cool: '#57a8ff', off: ''};
+  el.className = cls === 'off' ? '' :
+    'th-' + cls + (cls === 'heat' && printActive ? ' nopulse' : '');
+  el.style.color = colors[cls] || '';
+  bar.style.background = colors[cls] || '';
+  var nowMs = Date.now();
+  if (cls === 'at' && (tempPrev[id] === 'heat' || tempPrev[id] === 'over') &&
+      nowMs - (tempFlashAt[id] || 0) > 60000){
+    tempFlashAt[id] = nowMs;
+    el.classList.add('th-flash');
+    setTimeout(function(){ el.classList.remove('th-flash'); }, 1500);
+  }
+  tempPrev[id] = cls;
+}
+function printEnded(prev, now){
+  if (!prev || !now) return false;
+  var active = {'Printing': 1, 'Pausing': 1, 'Paused': 1,
+                'Starting print': 1};
+  if (!active[prev.state]) return false;
+  if (now.state === 'Complete') return true;
+  return now.state !== prev.state && now.progress !== null &&
+         now.progress !== undefined && now.progress >= 99.5;
+}
+var prevPrint = null;
+var muted = localStorage.getItem('pd_muted') === '1';
+var actx = null;
+function ensureAudio(){
+  if (!actx){
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ actx = null; }
+  }
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+function chime(){
+  if (muted) return;
+  ensureAudio();
+  if (!actx) return;
+  var t = actx.currentTime + 0.02;
+  [880, 1174.66, 1567.98].forEach(function(f, i){
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    var s = t + i * 0.18;
+    g.gain.setValueAtTime(0.0001, s);
+    g.gain.exponentialRampToValueAtTime(0.22, s + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, s + 0.35);
+    o.connect(g); g.connect(actx.destination);
+    o.start(s); o.stop(s + 0.4);
+  });
+}
+function syncMuteBtn(){ $('mutebtn').textContent = muted ? '🔇' : '🔊'; }
+$('mutebtn').onclick = function(){
+  muted = !muted;
+  localStorage.setItem('pd_muted', muted ? '1' : '0');
+  syncMuteBtn();
+  if (!muted) chime();
+};
+syncMuteBtn();
+document.addEventListener('pointerdown', ensureAudio);
+
 function render(d){
   $('pname').textContent = d.machine_name || 'Printer';
   $('dot').className = 'dot' + (d.online ? ' on' : '');
   $('fw').textContent = d.firmware ? 'Firmware ' + d.firmware : '';
   $('err').textContent = d.online ? '' : (d.error || 'offline');
   var st = d.print_state || d.machine_state || '—';
+  printActive = (st === 'Printing' || st === 'Paused' || st === 'Pausing');
   var badge = $('state');
   badge.textContent = d.online ? st : 'Offline';
   badge.className = 'badge' + (st === 'Printing' ? ' printing' :
@@ -1258,14 +1347,15 @@ function render(d){
   $('remain').textContent = fmtClock(d.remaining_s);
   $('speed').textContent = d.print_speed ? d.print_speed + ' ' + (d.speed_unit || 'mm/s') : '—';
   $('coords').textContent = d.coords || '—';
-  function temp(id, bid, cur, tgt, max){
+  function temp(id, bid, cur, tgt, max, colorize){
     $(id).textContent = (cur === null || cur === undefined) ? '—' :
       Math.round(cur) + '°' + (tgt ? ' / ' + Math.round(tgt) + '°' : '');
     $(bid).style.width = (cur ? Math.min(100, 100 * cur / max) : 0) + '%';
+    if (colorize) paintTemp(id, bid, heatState(cur, tgt));
   }
-  temp('noz','nozb', d.nozzle, d.nozzle_target, 320);
-  temp('bed','bedb', d.bed, d.bed_target, 110);
-  temp('box','boxb', d.box, null, 80);
+  temp('noz','nozb', d.nozzle, d.nozzle_target, 320, true);
+  temp('bed','bedb', d.bed, d.bed_target, 110, true);
+  temp('box','boxb', d.box, null, 80, false);
   function fan(id, v){ $(id).textContent =
     (v === null || v === undefined) ? '—' : v + '%'; }
   fan('fmodel', d.fans.model); fan('faux', d.fans.aux); fan('fbox', d.fans.box);
@@ -1293,8 +1383,11 @@ function render(d){
   } else {
     box.style.display = 'none';
   }
+  var nowPrint = {state: st, progress: p};
+  if (printEnded(prevPrint, nowPrint)) chime();
+  prevPrint = nowPrint;
   var printing = (st === 'Printing');
-  setTimeout(poll, printing ? 2000 : 5000);
+  setTimeout(poll, printing ? 1000 : 5000);
   if (d.online && !camStarted) startCam();
 }
 

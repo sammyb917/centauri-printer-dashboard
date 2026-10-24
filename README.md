@@ -10,7 +10,12 @@ no slicer, no Home Assistant required.
 - **Now printing** — file name, progress bar, current/total layer, elapsed
   and remaining time, print speed, and head position
 - **Temperatures** — nozzle, bed, and chamber, with targets, plus fan speeds
-  and chamber light state
+  and chamber light state. Nozzle and bed values are color-coded against
+  their targets: red (pulsing while the printer is heating up, steady
+  during a print) below target, green at target, blue above target or
+  cooling — and they flash when a heater first reaches its target
+- **Print-finished chime** — a short three-note sound in the browser when
+  a print completes (header speaker button mutes it; choice is remembered)
 - **Camera** — the printer's built-in MJPEG stream, proxied through the
   dashboard so it just works in any browser
 - **CANVAS filament** — every tray with brand, material, name, and color
