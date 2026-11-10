@@ -1,3 +1,5 @@
 printer-dashboard-config.json
+printer-dashboard-multi-config.json
+thingiverse-token.json
 __pycache__/
 *.zip

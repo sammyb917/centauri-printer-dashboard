@@ -1,145 +1,133 @@
-# Printer Dashboard — Elegoo Centauri Carbon + CANVAS (SDCP V3)
+# Printer Dashboard — Elegoo Centauri Carbon (+ CANVAS)
 
-A single-file, zero-dependency web dashboard for the Elegoo Centauri Carbon
-FDM printer and its CANVAS 4-color filament unit. It talks to the printer
-over your LAN using Elegoo's SDCP protocol (V3 dialect) — no cloud account,
-no slicer, no Home Assistant required.
+A single-file Python (standard library only, no pip installs) dashboard for
+the Elegoo Centauri Carbon 1 with the CANVAS 4-color unit. It talks to the
+printer over your LAN using Elegoo's SDCP protocol, and serves a dark-mode
+web UI on port 8092.
 
-## What it does
-
-- **Now printing** — file name, progress bar, current/total layer, elapsed
-  and remaining time, print speed, and head position
-- **Temperatures** — nozzle, bed, and chamber, with targets, plus fan speeds
-  and chamber light state. Nozzle and bed values are color-coded against
-  their targets: red (pulsing while the printer is heating up, steady
-  during a print) below target, green at target, blue above target or
-  cooling — and they flash when a heater first reaches its target
-- **Print-finished chime** — a short three-note sound in the browser when
-  a print completes (header speaker button mutes it; choice is remembered)
-- **Camera** — the printer's built-in MJPEG stream, proxied through the
-  dashboard so it just works in any browser
-- **CANVAS filament** — every tray with brand, material, name, and color
-  chip; the tray currently in use is highlighted
-- **Print history** — collapsible list of past prints with status and
-  duration
-- **Controls** (collapsible) — Pause, Resume, Stop (with confirmation),
-  chamber light toggle, print-speed presets (50–150%), and
-  Model / Aux / Box fan sliders
-
-The dashboard is one Python file using only the standard library: the web
-server, the WebSocket client, and the SDCP protocol handling are all
-hand-rolled. There is nothing to `pip install`.
-
-## Requirements
-
-- Python 3.8 or newer
-- A Centauri Carbon (or compatible SDCP V3 printer) on the same LAN
-- That's it
+**This package ships with NO config file.** Out of the box the printer is
+found by LAN auto-discovery. Never commit a config file — one may hold your
+printer's IP or API tokens.
 
 ## Quick start
 
-**Windows**
+1. Make sure Python 3.8+ is installed.
+2. Run it: `python printer-dashboard.py` (Windows: double-click
+   `start-printer-dashboard.bat`).
+3. Open http://localhost:8092/ in a browser.
+4. If the page shows **"Printer not found yet"**, type your printer's IP
+   address and click Connect. The dashboard saves it next to the `.py`
+   file, so it sticks across restarts. If the printer moves to a new
+   address later, the dashboard re-scans the network on its own after a
+   few failed tries and updates the saved IP itself.
+5. The footer tag should read `printerdash-multi-v18`. If it shows an
+   older tag after an upgrade, hard-refresh the browser (Ctrl+Shift+R) —
+   a plain refresh does not reload the app.
 
-1. Copy this folder anywhere.
-2. Double-click `start-printer-dashboard.bat`.
-3. Open <http://localhost:8091/> in a browser.
+## Config (optional, next to the .py file)
 
-**Linux / macOS**
+- `printer-dashboard-config.json` — `{"printer_ip": "", "port": 8092}`.
+  Leave `printer_ip` empty for auto-discovery.
+- `printer-dashboard-multi-config.json` — `{"thingiverse_token": "..."}`
+  (optional, see Search below). Or put the token in the single-purpose
+  file `thingiverse-token.json` next to the `.py` instead.
+- Tokens are never printed, logged, or baked into this file.
 
-```sh
-python3 printer-dashboard.py
-```
+## What's in it
 
-Then open <http://localhost:8091/> in a browser.
-
-To stop it, close the console window or press Ctrl+C in its terminal.
-
-## Finding the printer
-
-You don't need to know the printer's IP address:
-
-1. The dashboard first tries any saved/configured IP.
-2. If nothing answers there after a few attempts, it broadcasts an SDCP
-   discovery probe on the LAN and adopts the address that replies.
-3. If the scan finds nothing (some routers block the broadcast), the page
-   itself shows an IP-entry box. Type the printer's address — it's on the
-   printer's touchscreen under Network — and the dashboard connects
-   immediately and remembers it.
-
-### Optional config file
-
-Settings live in `printer-dashboard-config.json` next to
-`printer-dashboard.py`. You normally never touch it — the dashboard writes
-it for you when you enter an IP on the page — but you can pre-seed it:
-
-```json
-{ "printer_ip": "192.168.1.50", "port": 8091 }
-```
-
-`printer_ip` pins the printer's address; `port` changes the dashboard's
-own web port (default 8091).
+- **6 tabs:** Home, Printer, Search, Filament, Maintenance, Options.
+  Dark mode throughout.
+- **Home:** camera window + CANVAS tile showing which tray is loaded and
+  in use. Four small stat tiles in one row: Nozzle temp, Bed temp,
+  Chamber, Chamber light. **Click the camera picture to enlarge it**;
+  click again to close.
+- **Printer:** temp tiles with compact 30-minute charts, CANVAS card,
+  Controls tile (pause / resume / stop), print speed as five buttons —
+  **Quiet 50%, Slower 75%, Normal 100% (default), Faster 125%,
+  Ludicrous 150%** — and three fan sliders: part cooling (ModelFan),
+  side/aux (AuxiliaryFan), chamber (BoxFan).
+- **Progress ring:** the print-progress % sits on top of a ring arc, so
+  it is never covered up.
+- **Temp colours:** red while heating / green at target / blue while
+  cooling, on numbers, chips and bars, with a legend.
+- **Tap-to-change temps:** tap the nozzle or bed tile on Home or the
+  Printer tab to type a new target (nozzle 0–320 °C, bed 0–120 °C). It
+  applies while printing, updates the matching tile on the other tab, and
+  recomputes the red/green/blue state. The tile shows the printer's
+  actual reported target back, so you can see whether the printer took it.
+- **Chamber light:** tap the Home "Chamber light" tile to toggle it, in
+  sync with the Printer tab switch and camera dimming.
+- **Search tab:** one search box; server-side search of MakerWorld (no
+  key), Printables (no key), Thingiverse (free app token from your config
+  — get one at https://www.thingiverse.com/developers, no key means
+  Thingiverse is skipped) and Cults3D (free API key at
+  https://cults3d.com/en/api/keys — until one is added to your config
+  file, Cults3D shows a link out instead of results). Each result shows a
+  small picture, model name, the site it came from, and a "Get the STL"
+  link to the model page. Site chips are clickable toggles. Options has a
+  **"Free prints only"** switch, ON by default — when on, paid designs are
+  removed from the results entirely and the header count equals the cards
+  shown.
+- **Filament tab:** one home for your spools, grouped by
+  brand+material+color into one tile each with combined kg + spool count.
+  It starts empty — add spools with the form, which includes a photo
+  colour picker: snap a photo of the spool and the page samples the
+  colour, fills the swatch and guesses the name (correct it if the light
+  fooled it). Spools live in the browser (localStorage), not on the
+  server, and each tile shows the OrcaSlicer settings to use for that
+  spool.
+- **Maintenance tab:** six upkeep cards — clean the fans (30d), lube the
+  rails (90d), charcoal filter (180d), clean the bed (7d), check the
+  belts (180d), check the nozzle (90d) — each with last done, due next,
+  interval, progress bar, status badge, and a Mark done button (stamps
+  today and recalculates the next due date). The summary at the top shows
+  total print hours plus overdue / due soon / up to date counts. Each card
+  title links (new tab) to the Elegoo Centauri Carbon wiki:
+  https://wiki.elegoo.com/Centauri-carbon. Maintenance state lives in the
+  browser (localStorage).
+- **Auto light:** when a print starts the light turns on; when it ends the
+  light turns off (paused prints keep it on). Options switch. It only
+  works while the dashboard page is open — the watcher lives in the page
+  JavaScript.
+- **Tunes:** start of print plays an upbeat "giddy up and go" jingle; end
+  of print plays a short tune instead of a plain chime (never for stopped
+  prints). WebAudio melodies in the page JavaScript, with Options
+  switches to mute or change them.
+- **Tiles:** all tiles are movable + stretchable, with a Layout lock
+  button (locked by default; layout saves in the browser).
+- No estimated print-head mm/s speed — the printer only sends
+  PrintSpeedPct, so no speed is guessed from coordinates.
 
 ## Protocol notes (SDCP V3)
 
-Hard-won details about the Centauri Carbon's SDCP V3.0.0 dialect
-(firmware V1.4.x), verified against a real printer. Several of these
-differ from the older/resin SDCP documentation floating around:
+Connection needs the printer's MainboardID plus a connection Id from the
+UDP discovery reply. Status pushes arrive about once a second; the top
+level `Status` / `Attributes` keys carry the machine state. A bare
+`{"Ack": 0}` is a valid reply to several commands. Print ticks are in
+seconds, not milliseconds. CANVAS tray status: 1 = loaded, 2 = in use
+(Cmd 324). Device control rides Cmd 403: light (`LightStatus`), fans
+(`TargetFanSpeed` bundle), temps (`TempTargetNozzle` / `TempTargetHotbed` /
+`TempTargetBox`), speed (`PrintSpeedPct`). Pause is Cmd 129, stop is
+Cmd 130, resume is Cmd 131. Camera is MJPEG on port 3031.
 
-- **Requests must carry the discovery IDs.** Every command envelope's
-  top-level `Id` must be the *connection Id* handed out by the UDP
-  discovery reply, and `Data.MainboardID` the printer's mainboard ID.
-  Requests with missing or wrong IDs are silently ignored — the printer
-  won't even error.
-- **Status and attributes are top-level keys, not wrapped in `Data`.**
-  Status pushes arrive on topic `sdcp/status/<id>` shaped as
-  `{"Status": {...}, "MainboardID": ..., "Topic": ...}`, and attributes
-  on `sdcp/attributes/<id>` as `{"Attributes": {...}, ...}`. There is no
-  `Data.Data` payload like older SDCP dialects use.
-- **Command replies are bare acks.** A status request (Cmd 0) is answered
-  with just `{"Ack": 0}` on `sdcp/response/<id>`; the real data arrives
-  as the unsolicited status pushes. Don't wait for data in the reply.
-- **`PrintInfo` ticks are seconds, not milliseconds.** A 14h44m print
-  reports `TotalTicks: 53012`. (Resin-era firmware counts milliseconds;
-  this code treats values above ~200000 total as milliseconds.)
-- **CANVAS is Cmd 324.** The response carries `canvas_list` → `tray_list`
-  (snake_case keys) plus `active_canvas_id` / `active_tray_id`. Tray
-  `status`: 1 = loaded, 2 = loaded **and in use**.
-- **Settings go through Cmd 403**, as bundles mirroring the status
-  objects: `{"LightStatus": {"SecondLight": 0|1}}` for the chamber light,
-  `{"CurrentFanSpeed": {"ModelFan": n, "AuxiliaryFan": n, "BoxFan": n}}`
-  (send the full bundle with one fan changed) for fans, and
-  `{"PrintSpeedPct": n}` for print speed.
-- Print control: pause = Cmd 129, **stop = Cmd 130, continue/resume =
-  Cmd 131**. Camera enable = Cmd 386 with `{"Enable": 1}`; the MJPEG
-  stream itself is plain HTTP on port 3031. Print history is two-step:
-  Cmd 320 returns task IDs, Cmd 321 returns each task's detail.
-- Wire layout: WebSocket on port 3030 (`/websocket`), UDP discovery
-  broadcast `M99999` on port 3000, camera on port 3031.
+Note: unknown Cmd codes (or wrong payloads) sent in quick succession can
+crash the printer's `app` daemon and kill an active print — this dashboard
+sends only the confirmed Cmd 403 variants above.
 
-If you're debugging a dialect quirk, open
-`http://localhost:8091/api/raw` — it dumps the parsed status, attributes,
-CANVAS payload, and the last raw messages received from the printer.
+## Development / tests
 
-## Development
+`tests/fake_printer.py` is a fake SDCP printer for offline testing: UDP
+discovery on port 3000, a WebSocket server on 3030, status pushes, history
+(320→321), CANVAS (324), video (386), and pause/stop/resume plus light
+and speed via Cmd 403. Run it with `FAKE_V3=1` for the strict V3 dialect.
+It records every command it receives to `/tmp/fake-received.json`.
 
-`tests/fake_printer.py` is a simulated SDCP printer (WebSocket on 3030,
-UDP discovery on 3000) so you can develop and test without hardware:
-
-```sh
-FAKE_V3=1 python3 tests/fake_printer.py
-```
-
-Modes (environment variables):
-
-- `FAKE_V3=1` — speak the V3 dialect described above (top-level
-  `Status`/`Attributes` keys, bare-ack replies, seconds ticks)
-- `FAKE_STRICT=1` — ignore any request whose connection Id / MainboardID
-  don't match what discovery issued, like the real printer
-- `FAKE_NOPUSH=1` — never push status; only answer polls
-- `FAKE_FLAT=1` — send status in the flat variant shape (no nesting)
-
-Every command the fake receives is recorded to `/tmp/fake-received.json`.
+Limitation: the fake predates the v18 fan/temp commands — Cmd 403
+payloads with `TargetFanSpeed` or `TempTargetNozzle`/`TempTargetHotbed`
+are accepted silently but not reflected in the fake's status. Discovery,
+status, history, CANVAS, video, pause/stop and speed still verify
+end to end.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see `LICENSE`.
