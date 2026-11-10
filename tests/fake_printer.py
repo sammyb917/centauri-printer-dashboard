@@ -51,9 +51,9 @@ CANVAS = {
 }
 
 HISTORY = [
-    {"TaskId": "H1", "TaskName": "poop-chute.gcode", "TaskStatus": 1,
+    {"TaskId": "H1", "TaskName": "test-print-1.gcode", "TaskStatus": 1,
      "BeginTime": 1761000000, "EndTime": 1761003600, "Thumbnail": "/thumb_h1.jpg"},
-    {"TaskId": "H2", "TaskName": "knob-test.gcode", "TaskStatus": 8,
+    {"TaskId": "H2", "TaskName": "test-print-2.gcode", "TaskStatus": 8,
      "BeginTime": 1760900000, "EndTime": 1760901200, "Thumbnail": "/thumb_h2.jpg"},
 ]
 
