@@ -6,7 +6,7 @@ printer over your LAN using Elegoo's SDCP protocol, and serves a dark-mode
 web UI on port 8092.
 
 **For the regular Centauri — stock firmware or OpenCentauri patched (SDCP).**
-A separate Moonraker version for COSMOS is coming.
+Moonraker / COSMOS version: printer-dashboard-cosmos-v19.py — see README-moonraker.md.
 
 **This package ships with NO config file.** Out of the box the printer is
 found by LAN auto-discovery. Never commit a config file — one may hold your
