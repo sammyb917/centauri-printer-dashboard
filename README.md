@@ -5,6 +5,9 @@ the Elegoo Centauri Carbon 1 with the CANVAS 4-color unit. It talks to the
 printer over your LAN using Elegoo's SDCP protocol, and serves a dark-mode
 web UI on port 8092.
 
+**For the regular Centauri — stock firmware or OpenCentauri patched (SDCP).**
+A separate Moonraker version for COSMOS is coming.
+
 **This package ships with NO config file.** Out of the box the printer is
 found by LAN auto-discovery. Never commit a config file — one may hold your
 printer's IP or API tokens.
@@ -56,7 +59,10 @@ printer's IP or API tokens.
   recomputes the red/green/blue state. The tile shows the printer's
   actual reported target back, so you can see whether the printer took it.
 - **Chamber light:** tap the Home "Chamber light" tile to toggle it, in
-  sync with the Printer tab switch and camera dimming.
+  sync with the Printer tab switch and camera dimming. On OpenCentauri
+  patched firmware the light is turned on/off by the slicer start/end
+  G-code (M8213 on, M8212 off) — the dashboard does not change the light
+  on print start/end.
 - **Search tab:** one search box; server-side search of MakerWorld (no
   key), Printables (no key), Thingiverse (free app token from your config
   — get one at https://www.thingiverse.com/developers, no key means
@@ -85,10 +91,6 @@ printer's IP or API tokens.
   title links (new tab) to the Elegoo Centauri Carbon wiki:
   https://wiki.elegoo.com/Centauri-carbon. Maintenance state lives in the
   browser (localStorage).
-- **Auto light:** when a print starts the light turns on; when it ends the
-  light turns off (paused prints keep it on). Options switch. It only
-  works while the dashboard page is open — the watcher lives in the page
-  JavaScript.
 - **Tunes:** start of print plays an upbeat "giddy up and go" jingle; end
   of print plays a short tune instead of a plain chime (never for stopped
   prints). WebAudio melodies in the page JavaScript, with Options

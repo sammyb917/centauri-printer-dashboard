@@ -7,7 +7,7 @@ Talks to the printer over the LAN using Elegoo's SDCP protocol
 (WebSocket on port 3030, UDP discovery on port 3000, camera MJPEG on 3031).
 Pure Python standard library — no pip installs.
 
-Run:  python printer-dashboard.py   (serves http://<this-box>:8092/)
+Run:  python printer-dashboard-multi.py   (serves http://<this-box>:8092/)
 Config (OPTIONAL, next to this file): printer-dashboard-config.json
     { "printer_ip": "", "port": 8092 }
 Out of the box the printer is found by LAN auto-discovery. A saved or
@@ -16,7 +16,7 @@ dashboard falls back to scanning and adopts the address that answers.
 If the scan finds nothing, the dashboard page itself asks for the IP
 and saves it to the config (merging, never clobbering).
 
-Build tag: printerdash-multi-v18
+Build tag: printerdash-multi-v17
 """
 
 import base64
@@ -35,23 +35,30 @@ from urllib.parse import urlparse, parse_qs, quote
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# v18 ships with NO config file. Printer IP/port live in an optional
-# config file NEXT TO this file itself:
-#   printer-dashboard-config.json   { "printer_ip": "", "port": 8092 }
-# The Thingiverse token (optional, for Thingiverse search) lives in an
-# optional config next to this file too:
-#   printer-dashboard-multi-config.json  { "thingiverse_token": "..." }
-#   -- or in the single-purpose file thingiverse-token.json.
-# Nothing secret is ever baked into this file. Out of the box the printer
-# is found by LAN auto-discovery; the IP typed into the page's
-# "Printer not found yet" box is saved to the config next to this file,
-# so it persists across restarts.
+# v18 ships with NO config file (a blank config once wiped Sam's keys).
+# Printer IP/port live in the shared configs folder next to the v17 config,
+# and the Thingiverse token lives in the shared multi-config file there.
+# Both are read at runtime; nothing secret is ever baked into this file.
+# FALLBACK (Nov 9, 2026 fix): the shared folder only exists in the dev
+# workspace — on Sam's media PC it does not. So when the shared files are
+# missing (or hold no printer IP), v18 falls back to
+# printer-dashboard-config.json / printer-dashboard-multi-config.json
+# NEXT TO this file itself — exactly like v17 does. The IP Sam types into
+# the page's "Printer not found yet" box is saved to whichever config file
+# the IP was loaded from (or next to this file if none existed), so it
+# persists across restarts.
+CONFIG_PATH = os.path.normpath(os.path.join(
+    HERE, "..", "printer-dashboard-multi-configs",
+    "printer-dashboard-config.json"))
+MULTI_CONFIG_PATH = os.path.normpath(os.path.join(
+    HERE, "..", "printer-dashboard-multi-configs",
+    "printer-dashboard-multi-config.json"))
 LOCAL_CONFIG_PATH = os.path.join(HERE, "printer-dashboard-config.json")
 LOCAL_MULTI_CONFIG_PATH = os.path.join(HERE,
                                        "printer-dashboard-multi-config.json")
-# Small single-purpose token file: thingiverse-token.json next to this
-# file, {"thingiverse_token": "..."} — checked first, so no JSON editing
-# is needed to add a token.
+# Small single-purpose token file (Nov 9, 2026): thingiverse-token.json
+# next to this file, {"thingiverse_token": "..."}. Sam's token never made
+# it onto the media PC, so v18 also looks here — no JSON editing needed.
 THINGIVERSE_TOKEN_PATH = os.path.join(HERE, "thingiverse-token.json")
 BUILD_TAG = "printerdash-multi-v18"
 
@@ -92,15 +99,16 @@ def _read_json_config(path):
 
 
 def load_config():
-    """Reads the config file next to this script, filling in anything
-    still empty. Returns (cfg, source) where source is the file the
-    printer IP came from — that is where save_printer_ip writes, so a
-    typed-in IP persists across restarts. If no file supplied an IP,
-    source is the local file next to this script."""
+    """Shared configs folder first, then the file next to this script
+    (v17-style) filling in anything still empty. Returns (cfg, source)
+    where source is the file the printer IP came from — that is where
+    save_printer_ip writes, so a typed-in IP persists across restarts.
+    If no file supplied an IP, source is the local file next to this
+    script."""
     cfg = dict(DEFAULTS)
     filled = set()
     source = LOCAL_CONFIG_PATH
-    for path in (LOCAL_CONFIG_PATH,):
+    for path in (CONFIG_PATH, LOCAL_CONFIG_PATH):
         saved = _read_json_config(path)
         if not saved:
             continue
@@ -142,8 +150,8 @@ _wake = threading.Event()  # set when settings change -> session retries now
 def save_printer_ip(ip):
     """Persist a user-entered printer IP into the app config, MERGING with
     whatever is already there. Writes to the file the IP was loaded from
-    (CONFIG_SOURCE), the config next to this file. Only ever called
-    from the page's IP form or
+    (CONFIG_SOURCE) — the shared folder when it exists, otherwise the
+    config next to this file. Only ever called from the page's IP form or
     when discovery finds the printer at a new address — the app never
     creates or rewrites the config on its own."""
     cfg = {}
@@ -786,10 +794,10 @@ CMD_LIGHT = CMD_CONTROL
 
 # ------------------------------------------------------- 3D model search --
 # Server-side search across the free model sites, so the page never needs
-# keys in JavaScript. Thingiverse's app token is read from a config file
-# next to this script at runtime (never printed, never baked into this file).
+# keys in JavaScript. Thingiverse's app token is read from the shared
+# multi-config file at runtime (never printed, never baked into this file).
 # Cults3D has no API key on file yet, so it is skipped server-side until
-# one is added (see search_3d); the UI says so and links out instead.
+# Sam adds one (see search_3d); the UI says so and links out instead.
 # All three live endpoints below were verified with plain curl Nov 2026:
 #   MakerWorld  GET  api.bambulab.com/v1/search-service/select/design2
 #   Printables  POST api.printables.com/graphql/  (searchPrints2, items{})
@@ -799,7 +807,8 @@ CMD_LIGHT = CMD_CONTROL
 # so one dead site never breaks the search page.
 
 def load_thingiverse_token():
-    for path in (THINGIVERSE_TOKEN_PATH, LOCAL_MULTI_CONFIG_PATH):
+    for path in (MULTI_CONFIG_PATH, LOCAL_MULTI_CONFIG_PATH,
+                 THINGIVERSE_TOKEN_PATH):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -929,7 +938,7 @@ def search_3d(q, sites, free_only=True):
             site_reports.append({"site": "Cults3D", "ok": False,
                                  "error": "no Cults3D API key yet — add one at "
                                           "cults3d.com/en/api/keys and put it in "
-                                          "your config file to enable it",
+                                          "the shared config to enable it",
                                  "results": []})
             continue
         t = threading.Thread(target=run, args=(fns[s], s), daemon=True)
@@ -946,10 +955,21 @@ def search_3d(q, sites, free_only=True):
 
 
 # ---------------------------------------------------------------- filament --
-# The Filament tab starts empty: add your own spools with the form on the
-# tab (a photo colour picker samples the spool colour for you). Added
-# spools live in the browser's localStorage, not on the server.
-FILAMENT_SEED = []
+# The Filament tab's seed: ONLY the real spool from Sam's filament app.
+# (Inland PLA Black, 1000 g, full Orca settings. The Elegoo PLA Blue demo
+# spool is deliberately NOT imported.) Added spools live in the browser's
+# localStorage; this seed is the starting point, not a live sync.
+FILAMENT_SEED = [{
+    "brand": "Inland", "material": "PLA", "colorName": "Black",
+    "colorHex": "#232323", "capacityG": 1000, "remainingG": 1000, "spools": 1,
+    "settings": {"nozzleTempC": 210, "firstLayerNozzleTempC": 215,
+                 "bedTempC": 60, "firstLayerBedTempC": 65, "fanPercent": 100,
+                 "flowRatio": 0.98, "pressureAdvance": 0.03,
+                 "maxVolumetricSpeed": 22, "filamentDensity": 1.24,
+                 "filamentDiameterMm": 1.75, "retractionMm": 0.8,
+                 "retractionSpeedMms": 40, "zHopMm": 0.4,
+                 "printSpeedMms": 120, "adaptivePressureAdvance": False},
+}]
 
 
 # -------------------------------------------------------------- HTTP API ----
@@ -1019,8 +1039,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(search_3d(q, site_list, free_only=free))
         elif path == "/api/filament":
             self._json({"ok": True, "seed": FILAMENT_SEED,
-                        "note": "Add spools on the Filament tab. Added "
-                                "spools live in the browser."})
+                        "note": "Seed only: the Inland PLA Black spool from "
+                                "the filament app. Added spools live in the "
+                                "browser."})
         else:
             self._json({"error": "not found"}, 404)
 
@@ -1690,12 +1711,11 @@ PAGE = """
       <label class="opt"><input type="checkbox" id="opt-tune-end"> End-of-print tune (replaces the old chime)</label>
       <p class="note">The tunes obey the speaker button in the header. Browsers only allow sound after you have clicked somewhere on the page once. The end tune only plays when a print finishes — never for a stopped print.</p></div>
     <div class="tile"><h2>Chamber light</h2>
-      <label class="opt"><input type="checkbox" id="opt-autolight"> Auto light: on when a print starts, off when it ends</label>
-      <p class="note">Paused prints keep the light on. This only works while this dashboard page is open — the watcher lives in the page.</p>
+      <p class="note">The light is controlled by the slicer start/end G-code now (M8213 on, M8212 off). Use the light tile to toggle it by hand.</p>
       <label class="opt"><input type="checkbox" id="opt-cam"> Show camera on Printer</label></div>
     <div class="tile"><h2>3D model search</h2>
       <label class="opt"><input type="checkbox" id="opt-freeonly"> Free prints only</label>
-      <p class="note">When on, paid designs are removed from the search results entirely. Cults3D search needs a free API key (cults3d.com/en/api/keys) — until one is added to your config file, Cults3D shows a link out instead of results.</p></div>
+      <p class="note">When on, paid designs are removed from the search results entirely. Cults3D search needs a free API key (cults3d.com/en/api/keys) — until one is added to the shared config, Cults3D shows a link out instead of results.</p></div>
     <div class="tile"><h2>Layout</h2>
       <p class="note">Tiles are movable and stretchable while the layout is unlocked — drag a tile by its heading, stretch it from the corner grip. Use the lock button in the top bar to lock or unlock.</p>
       <button id="opt-layoutreset">Reset tile layout</button>
@@ -1774,7 +1794,7 @@ PAGE = """
       <div id="fi-groups"></div></div>
     <div class="tile"><h2>Add a spool</h2>
       <div style="margin:8px 0"><span class="sub">Brand</span><br>
-        <input type="text" id="fi-brand" placeholder="e.g. Elegoo" style="width:100%"></div>
+        <input type="text" id="fi-brand" placeholder="e.g. Inland" style="width:100%"></div>
       <div style="margin:8px 0"><span class="sub">Material</span><br>
         <select id="fi-material" style="width:100%"><option>PLA</option><option>PETG</option><option>ABS</option><option>ASA</option><option>TPU</option><option>PLA-CF</option><option>PETG-CF</option><option>Other</option></select></div>
       <div style="margin:8px 0"><span class="sub">Spool colour — snap a photo of the spool</span><br>
@@ -1881,8 +1901,8 @@ function playTone(freq, t0, dur, type, vol){
   osc.connect(gain); gain.connect(audioCtx.destination);
   osc.start(t0); osc.stop(t0 + dur + 0.05);
 }
-// Start-of-print jingle: upbeat "giddy up and go" run. Mute it or swap
-// the tune from Options.
+// Start-of-print jingle: upbeat "giddy up and go" run. Sam hears it first
+// and can ask for a swap.
 function playStartJingle(){
   if (lsGet("pd_multi_muted", "0") === "1") return;
   if (lsGet("pd_multi_tune_start", "1") !== "1") return;
@@ -2110,26 +2130,19 @@ var lastHistory = [];
 var prevPrintState = "";
 var prevProgress = 0;
 var lastChimedTask = "";
-// Print-state transitions: start jingle + auto-light on at print start,
-// end tune + auto-light off when a print finishes. Paused prints keep the
-// light on. Auto-light only works while this page is open.
+// Print-state transitions: start jingle + end tune only.
+// Chamber light is owned by the slicer start/end G-code now (M8213 on,
+// M8212 off) — the dashboard never touches the light on print changes.
 function maybeTunes(d){
   var st = d.print_state || "";
   var task = d.task_id || "";
-  var autoLight = lsGet("pd_multi_autolight", "0") === "1";
-  var lightOn = (d.light_on === 1 || d.light_on === true);
   if (st !== prevPrintState){
     if (st === "Printing" && !ACTIVE_PRINT[prevPrintState]){
       playStartJingle();
-      if (autoLight && !lightOn) postControl({action: "light"});
     } else if (st === "Complete" && ACTIVE_PRINT[prevPrintState] && task !== lastChimedTask){
       lastChimedTask = task; playEndTune();
-      if (autoLight && lightOn) postControl({action: "light"});
-    } else if (st === "Stopped" && ACTIVE_PRINT[prevPrintState]){
-      if (autoLight && lightOn) postControl({action: "light"});
     } else if (d.progress !== null && d.progress >= 99.5 && ACTIVE_PRINT[prevPrintState] && task !== lastChimedTask){
       lastChimedTask = task; playEndTune();
-      if (autoLight && lightOn) postControl({action: "light"});
     }
   }
   prevPrintState = st;
@@ -2382,9 +2395,6 @@ function initOptions(){
   var tuneEnd = $("opt-tune-end");
   tuneEnd.checked = lsGet("pd_multi_tune_end", "1") === "1";
   tuneEnd.addEventListener("change", function(){ lsSet("pd_multi_tune_end", tuneEnd.checked ? "1" : "0"); });
-  var autoLight = $("opt-autolight");
-  autoLight.checked = lsGet("pd_multi_autolight", "0") === "1";
-  autoLight.addEventListener("change", function(){ lsSet("pd_multi_autolight", autoLight.checked ? "1" : "0"); });
   var camBox = $("opt-cam");
   camBox.checked = lsGet("pd_multi_cam", "1") === "1";
   camBox.addEventListener("change", function(){
@@ -2406,13 +2416,12 @@ function initOptions(){
     location.reload();
   };
   $("opt-reset").onclick = function(){
-    ["pd_multi_poll", "pd_multi_tune_start", "pd_multi_tune_end", "pd_multi_autolight", "pd_multi_cam", "pd_multi_freeonly", "pd_multi_muted"].forEach(function(k){
+    ["pd_multi_poll", "pd_multi_tune_start", "pd_multi_tune_end", "pd_multi_cam", "pd_multi_freeonly", "pd_multi_muted"].forEach(function(k){
       try { localStorage.removeItem(k); } catch(e){}
     });
     pollInp.value = "1";
     tuneStart.checked = true;
     tuneEnd.checked = true;
-    autoLight.checked = false;
     camBox.checked = true;
     freeBox.checked = true;
     refreshMuteBtn();
@@ -2719,7 +2728,7 @@ document.querySelectorAll(".tile h2").forEach(function(h){
 // ------------------------------------------------------- v18: temp editors
 // Tap a nozzle/bed temp tile (Home or Printer) to change its target while
 // printing. The tile shows the printer's actual reported target back, so
-// you can see whether the printer took it.
+// Sam can see whether the printer took it.
 var TEMP_LIMITS = {nozzle: {min: 0, max: 320, label: "Nozzle"},
                    bed: {min: 0, max: 120, label: "Bed"}};
 function closeTempEditors(){
